@@ -3,7 +3,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-URL="http://127.0.0.1:7869"
+URL="http://127.0.0.1:8000"
 PYTHON="python3"
 VENV_PYTHON=".venv/bin/python"
 
@@ -15,16 +15,17 @@ if [[ ! -x "$VENV_PYTHON" ]]; then
 fi
 
 echo "Installing dependencies..."
-"$VENV_PYTHON" -m pip install -r requirements.txt
+"$VENV_PYTHON" -m pip install -r requirements.txt -q
 
-EXISTING_PIDS=$(lsof -ti tcp:7869 || true)
+EXISTING_PIDS=$(lsof -ti tcp:8000 || true)
 if [[ -n "$EXISTING_PIDS" ]]; then
-  echo "Stopping existing service on port 7869..."
-  echo "$EXISTING_PIDS" | xargs kill
+  echo "Stopping existing service on port 8000..."
+  echo "$EXISTING_PIDS" | xargs kill 2>/dev/null || true
   sleep 1
 fi
 
-"$VENV_PYTHON" -m uvicorn server:app --host 127.0.0.1 --port 7869 &
+echo "Starting server on port 8000..."
+"$VENV_PYTHON" -m uvicorn server:app --host 127.0.0.1 --port 8000 &
 SERVER_PID=$!
 
 cleanup() {
@@ -34,6 +35,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+echo "Waiting for service to be ready..."
 for i in {1..30}; do
   if curl -fsS "$URL/api/key" >/dev/null 2>&1; then
     echo "WebUI is ready: $URL"
