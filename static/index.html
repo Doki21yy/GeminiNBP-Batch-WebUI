@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gemini NBP Batch WebUI</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <h1>Gemini NBP Batch WebUI</h1>
+          <p id="keyStatus">检查 API Key 中...</p>
+        </div>
+        <button id="setKeyBtn" class="secondary" type="button">设置 API Key</button>
+      </header>
+
+      <section class="workspace">
+        <form id="generateForm" class="panel">
+          <label>
+            Prompt
+            <textarea id="promptInput" rows="9" placeholder="每行一个 prompt；如果只写一行，可以用右侧数量批量复制。"></textarea>
+          </label>
+
+          <div class="grid">
+            <label>
+              模型
+              <input id="modelName" value="gemini_nbp" />
+            </label>
+            <label>
+              批量数量
+              <input id="batchCount" type="number" min="1" max="100" value="4" />
+            </label>
+            <label>
+              并发数
+              <input id="concurrency" type="number" min="1" max="20" value="4" />
+            </label>
+            <label>
+              Max tokens
+              <input id="maxTokens" type="number" min="256" max="65536" step="256" value="4096" />
+            </label>
+            <label>
+              尺寸
+              <select id="imageSize">
+                <option>default</option>
+                <option>1K</option>
+                <option>2K</option>
+                <option>4K</option>
+              </select>
+            </label>
+            <label>
+              比例
+              <select id="aspectRatio">
+                <option>default</option>
+                <option>1:1</option>
+                <option>16:9</option>
+                <option>9:16</option>
+                <option>4:3</option>
+                <option>3:4</option>
+                <option>3:2</option>
+                <option>2:3</option>
+              </select>
+            </label>
+          </div>
+
+          <label>
+            参考图
+            <input id="referenceImages" type="file" accept="image/*" multiple />
+          </label>
+
+          <label>
+            参考图模式
+            <select id="referenceMode">
+              <option value="split">每张图一个任务</option>
+              <option value="combined">全部参考图合并到每个任务</option>
+            </select>
+          </label>
+
+          <div id="taskPreview" class="taskPreview">当前会创建 0 个任务</div>
+
+          <div class="actions">
+            <button id="generateBtn" type="submit">开始批量生成</button>
+            <button id="clearBtn" class="secondary" type="button">清空结果</button>
+          </div>
+        </form>
+
+        <section class="results">
+          <div class="resultsHeader">
+            <h2>结果</h2>
+            <div class="resultsTools">
+              <button id="downloadAllBtn" type="button" disabled>下载全部图片</button>
+              <span id="summary">等待任务</span>
+            </div>
+          </div>
+          <div id="resultGrid" class="resultGrid"></div>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="keyDialog">
+      <form method="dialog" class="dialogPanel">
+        <h2>设置 API Key</h2>
+        <input id="apiKeyInput" type="password" placeholder="Ark API Key" autocomplete="off" />
+        <div class="dialogActions">
+          <button id="cancelKeyBtn" class="secondary" value="cancel" type="button">取消</button>
+          <button id="saveKeyBtn" value="default" type="button">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/static/app.js?v=20260520_refname_download"></script>
+  </body>
+</html>
