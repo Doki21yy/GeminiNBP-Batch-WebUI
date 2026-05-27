@@ -29,6 +29,8 @@ DEFAULT_MODEL = "gemini_nbp"
 IMAGE_SIZE_ALIASES = {
     "1024x1024": "1K",
     "1024": "1K",
+    "2K": "2K",
+    "2048x2048": "2K",
 }
 
 OUTPUT_DIR.mkdir(exist_ok=True)
