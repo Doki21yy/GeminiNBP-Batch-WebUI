@@ -30,3 +30,14 @@ http://127.0.0.1:7869
 - 尺寸使用接口支持的 `1K`、`2K`、`4K`；旧的 `1024x1024` 会在后端自动映射为 `1K`。
 - 生成结果会保存到 `outputs/`。
 - `config.json` 会保存本地 API Key，不会提交到 Git。
+
+## Vercel 部署
+
+1. 导入这个 GitHub 仓库到 Vercel。
+2. 在 Vercel 项目 `Settings -> Environment Variables` 添加：
+   - `ARK_API_KEY` = 你的 Ark API Key
+3. 直接触发部署，不需要额外 Build Command。
+
+说明：
+- 项目已包含 `vercel.json` 和 `api/index.py`，会自动走 Python Serverless Function。
+- Vercel 环境下不会使用 `config.json`；页面上“设置 API Key”按钮会自动禁用，并提示使用环境变量。

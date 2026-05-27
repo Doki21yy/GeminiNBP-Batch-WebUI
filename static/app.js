@@ -24,7 +24,15 @@ let lastSettings = null;
 async function refreshKeyStatus() {
   const response = await fetch("/api/key");
   const data = await response.json();
-  keyStatus.textContent = data.configured ? "API Key 已设置" : "API Key 未设置";
+  if (data.vercel) {
+    keyStatus.textContent = data.configured ? "API Key 已设置（Vercel 环境变量）" : "API Key 未设置（请配置 ARK_API_KEY）";
+    setKeyBtn.disabled = true;
+    setKeyBtn.title = "Vercel 部署请在项目环境变量中设置 ARK_API_KEY";
+  } else {
+    keyStatus.textContent = data.configured ? "API Key 已设置" : "API Key 未设置";
+    setKeyBtn.disabled = false;
+    setKeyBtn.title = "";
+  }
 }
 
 function splitPrompts(text, batchCount) {

@@ -2,6 +2,7 @@ import asyncio
 import base64
 import io
 import json
+import os
 import time
 import uuid
 import zipfile
@@ -18,8 +19,10 @@ from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
-OUTPUT_DIR = ROOT / "outputs"
+IS_VERCEL = bool(os.environ.get("VERCEL"))
+OUTPUT_DIR = Path("/tmp/gemini_nbp_outputs") if IS_VERCEL else ROOT / "outputs"
 CONFIG_PATH = ROOT / "config.json"
+ENV_API_KEY = os.environ.get("ARK_API_KEY", "").strip()
 
 ARK_MULTIMODAL_URL = "https://aidp.bytedance.net/api/modelhub/online/multimodal/crawl"
 DEFAULT_MODEL = "gemini_nbp"
@@ -82,9 +85,9 @@ def _save_config(config: dict[str, Any]) -> None:
 
 
 def _get_api_key() -> str:
-    api_key = _load_config().get("api_key", "").strip()
+    api_key = ENV_API_KEY or _load_config().get("api_key", "").strip()
     if not api_key:
-        raise HTTPException(status_code=400, detail="API key is not set.")
+        raise HTTPException(status_code=400, detail="API key is not set. For Vercel, set ARK_API_KEY in project environment variables.")
     return api_key
 
 
@@ -175,7 +178,7 @@ def _resolve_output_file(image_url: str) -> Path:
     if not image_url.startswith("/outputs/"):
         raise HTTPException(status_code=400, detail=f"Unsupported image url: {image_url}")
 
-    candidate = (ROOT / image_url.lstrip("/")).resolve()
+    candidate = (OUTPUT_DIR / image_url.replace("/outputs/", "", 1)).resolve()
     output_root = OUTPUT_DIR.resolve()
     if output_root not in candidate.parents:
         raise HTTPException(status_code=400, detail=f"Invalid output path: {image_url}")
@@ -335,11 +338,17 @@ async def index() -> FileResponse:
 
 @app.get("/api/key")
 async def api_key_status() -> dict[str, bool]:
-    return {"configured": bool(_load_config().get("api_key", "").strip())}
+    return {
+        "configured": bool(_get_api_key()),
+        "source": "env" if ENV_API_KEY else "local_file",
+        "vercel": IS_VERCEL,
+    }
 
 
 @app.post("/api/key")
 async def set_api_key(payload: ApiKeyPayload) -> dict[str, bool]:
+    if IS_VERCEL:
+        raise HTTPException(status_code=400, detail="Vercel deployment uses ARK_API_KEY environment variable. Please set it in Vercel project settings.")
     config = _load_config()
     config["api_key"] = payload.api_key.strip()
     _save_config(config)
