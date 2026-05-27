@@ -16,11 +16,39 @@ echo [检查] 正在检测 Python...
 python --version >nul 2>&1
 if errorlevel 1 (
     echo.
-    echo [错误] 未检测到 Python，请先安装 Python 3.9+
-    echo 下载地址: https://www.python.org/downloads/
+    echo [安装] 未检测到 Python，正在自动安装...
     echo.
-    pause
-    exit /b 1
+
+    REM 优先使用 winget 安装
+    where winget >nul 2>&1
+    if not errorlevel 1 (
+        echo 正在通过 winget 安装 Python，请稍候...
+        winget install Python.Python.3.12 --silent --accept-source-agreements --accept-package-agreements
+    ) else (
+        echo 正在下载 Python 安装包...
+        powershell -NoProfile -Command ^
+            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ^
+            $installer = Join-Path $env:TEMP 'python-installer.exe'; ^
+            Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe' -OutFile $installer; ^
+            Start-Process -FilePath $installer -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1' -Wait; ^
+            Remove-Item $installer"
+    )
+
+    REM 刷新环境变量并重新检测
+    for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SystemPath=%%b"
+    set "PATH=%SystemPath%;%PATH%"
+
+    python --version >nul 2>&1
+    if errorlevel 1 (
+        echo.
+        echo [错误] Python 安装失败，请手动安装后重试
+        echo 下载地址: https://www.python.org/downloads/
+        echo.
+        pause
+        exit /b 1
+    )
+    echo.
+    echo [完成] Python 安装成功
 )
 echo [OK] Python 已找到
 
