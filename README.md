@@ -40,4 +40,6 @@ http://127.0.0.1:7869
 
 说明：
 - 项目已包含 `vercel.json` 和 `api/index.py`，会自动走 Python Serverless Function。
-- Vercel 环境下不会使用 `config.json`；页面上“设置 API Key”按钮会自动禁用，并提示使用环境变量。
+- Vercel 环境下支持两种方式：
+  - 在 Vercel 配置全局 `ARK_API_KEY`（全员共用）。
+  - 每个同事在网页右上角“设置 API Key”，仅保存到各自浏览器 `localStorage`，请求时按用户自己的 key 提交。

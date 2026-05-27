@@ -6,3 +6,4 @@ config.json
 outputs/
 screenshot*.png
 
+.vercel

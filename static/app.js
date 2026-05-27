@@ -20,14 +20,25 @@ let currentDownloadFiles = [];
 let currentResults = [];
 let currentTaskPayloads = [];
 let lastSettings = null;
+const LOCAL_KEY_STORAGE = "gemini_nbp_api_key";
+let isVercelMode = false;
 
 async function refreshKeyStatus() {
   const response = await fetch("/api/key");
   const data = await response.json();
-  if (data.vercel) {
-    keyStatus.textContent = data.configured ? "API Key 已设置（Vercel 环境变量）" : "API Key 未设置（请配置 ARK_API_KEY）";
-    setKeyBtn.disabled = true;
-    setKeyBtn.title = "Vercel 部署请在项目环境变量中设置 ARK_API_KEY";
+  isVercelMode = Boolean(data.vercel);
+  if (isVercelMode) {
+    const browserKey = localStorage.getItem(LOCAL_KEY_STORAGE)?.trim();
+    const hasBrowserKey = Boolean(browserKey);
+    if (hasBrowserKey) {
+      keyStatus.textContent = "API Key 已设置（当前浏览器）";
+    } else if (data.configured) {
+      keyStatus.textContent = "API Key 已设置（Vercel 环境变量）";
+    } else {
+      keyStatus.textContent = "API Key 未设置（请点击右上角按钮设置）";
+    }
+    setKeyBtn.disabled = false;
+    setKeyBtn.title = "为当前浏览器设置独立 API Key";
   } else {
     keyStatus.textContent = data.configured ? "API Key 已设置" : "API Key 未设置";
     setKeyBtn.disabled = false;
@@ -240,13 +251,17 @@ saveKeyBtn.addEventListener("click", async () => {
 
   saveKeyBtn.disabled = true;
   try {
-    const response = await fetch("/api/key", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: apiKey }),
-    });
-    if (!response.ok) {
-      throw new Error(await response.text());
+    if (isVercelMode) {
+      localStorage.setItem(LOCAL_KEY_STORAGE, apiKey);
+    } else {
+      const response = await fetch("/api/key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: apiKey }),
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
     }
     keyDialog.close();
     await refreshKeyStatus();
@@ -266,12 +281,14 @@ clearBtn.addEventListener("click", () => {
 });
 
 async function generateTask(taskPayload, settings) {
+  const browserApiKey = localStorage.getItem(LOCAL_KEY_STORAGE)?.trim();
   const payload = {
     prompts: [taskPayload.prompt],
     model_name: settings.modelName,
     max_tokens: settings.maxTokens,
     image_size: settings.imageSize,
     aspect_ratio: settings.aspectRatio,
+    api_key: browserApiKey || undefined,
     concurrency: 1,
     reference_image_groups: [taskPayload.referenceImages],
   };
@@ -402,6 +419,7 @@ form.addEventListener("submit", async (event) => {
       max_tokens: lastSettings.maxTokens,
       image_size: lastSettings.imageSize,
       aspect_ratio: lastSettings.aspectRatio,
+      api_key: localStorage.getItem(LOCAL_KEY_STORAGE)?.trim() || undefined,
       concurrency: Number(document.querySelector("#concurrency").value),
       reference_image_groups: tasks.map((task) => task.referenceImages),
     };

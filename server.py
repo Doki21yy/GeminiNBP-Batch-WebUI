@@ -56,6 +56,7 @@ class GeneratePayload(BaseModel):
     max_tokens: int = Field(default=4096, ge=256, le=65536)
     image_size: str = "default"
     aspect_ratio: str = "default"
+    api_key: str | None = None
     reference_images: list[str] = []
     reference_image_groups: list[list[str]] | None = None
     concurrency: int = Field(default=4, ge=1, le=20)
@@ -84,8 +85,8 @@ def _save_config(config: dict[str, Any]) -> None:
     CONFIG_PATH.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _get_api_key() -> str:
-    api_key = ENV_API_KEY or _load_config().get("api_key", "").strip()
+def _get_api_key(override: str | None = None) -> str:
+    api_key = (override or "").strip() or ENV_API_KEY or _load_config().get("api_key", "").strip()
     if not api_key:
         raise HTTPException(status_code=400, detail="API key is not set. For Vercel, set ARK_API_KEY in project environment variables.")
     return api_key
@@ -338,11 +339,10 @@ async def index() -> FileResponse:
 
 @app.get("/api/key")
 async def api_key_status() -> dict[str, bool]:
-    return {
-        "configured": bool(_get_api_key()),
-        "source": "env" if ENV_API_KEY else "local_file",
-        "vercel": IS_VERCEL,
-    }
+    if IS_VERCEL:
+        # In Vercel multi-user mode, each browser can pass its own key per request.
+        return {"configured": bool(ENV_API_KEY), "source": "env" if ENV_API_KEY else "browser", "vercel": True}
+    return {"configured": bool(_get_api_key()), "source": "env" if ENV_API_KEY else "local_file", "vercel": False}
 
 
 @app.post("/api/key")
@@ -364,7 +364,7 @@ async def generate(payload: GeneratePayload) -> dict[str, Any]:
     if payload.reference_image_groups is not None and len(payload.reference_image_groups) != len(prompts):
         raise HTTPException(status_code=400, detail="reference_image_groups must match prompt count.")
 
-    api_key = _get_api_key()
+    api_key = _get_api_key(payload.api_key)
     semaphore = asyncio.Semaphore(payload.concurrency)
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(180.0)) as client:
