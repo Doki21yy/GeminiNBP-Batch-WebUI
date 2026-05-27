@@ -338,7 +338,7 @@ async def index() -> FileResponse:
 
 
 @app.get("/api/key")
-async def api_key_status() -> dict[str, bool]:
+async def api_key_status() -> dict[str, Any]:
     if IS_VERCEL:
         # In Vercel multi-user mode, each browser can pass its own key per request.
         return {"configured": bool(ENV_API_KEY), "source": "env" if ENV_API_KEY else "browser", "vercel": True}
