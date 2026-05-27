@@ -39,6 +39,9 @@ async function refreshKeyStatus() {
     }
     setKeyBtn.disabled = false;
     setKeyBtn.title = "为当前浏览器设置独立 API Key";
+    if (!taskPreview.textContent.includes("Vercel")) {
+      taskPreview.textContent = `${estimateTaskCount()}（Vercel 模式按任务分批请求）`;
+    }
   } else {
     keyStatus.textContent = data.configured ? "API Key 已设置" : "API Key 未设置";
     setKeyBtn.disabled = false;
@@ -98,12 +101,39 @@ function fileToDataUrl(file) {
   });
 }
 
+function compressImageDataUrl(dataUrl, mimeType = "image/jpeg", quality = 0.82, maxSide = 1280) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const width = image.naturalWidth || image.width;
+      const height = image.naturalHeight || image.height;
+      const scale = Math.min(1, maxSide / Math.max(width, height));
+      const targetWidth = Math.max(1, Math.round(width * scale));
+      const targetHeight = Math.max(1, Math.round(height * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(dataUrl);
+        return;
+      }
+      ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+      resolve(canvas.toDataURL(mimeType, quality));
+    };
+    image.onerror = () => reject(new Error("图片压缩失败"));
+    image.src = dataUrl;
+  });
+}
+
 async function readReferenceImages() {
   const files = Array.from(referenceImagesInput.files);
   const dataUrls = await Promise.all(files.map(fileToDataUrl));
+  const compressed = await Promise.all(dataUrls.map((dataUrl) => compressImageDataUrl(dataUrl)));
   return files.map((file, index) => ({
     name: file.name,
-    dataUrl: dataUrls[index],
+    dataUrl: compressed[index],
   }));
 }
 
@@ -307,6 +337,35 @@ async function generateTask(taskPayload, settings) {
   return data.results[0];
 }
 
+async function runTasksWithConcurrency(tasks, concurrency, runTask) {
+  const results = new Array(tasks.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= tasks.length) {
+        return;
+      }
+      try {
+        const result = await runTask(tasks[index], index);
+        results[index] = result;
+      } catch (error) {
+        results[index] = {
+          status: "error",
+          prompt: tasks[index].prompt,
+          error: error.message,
+        };
+      }
+    }
+  }
+
+  const workerCount = Math.max(1, Math.min(concurrency || 1, tasks.length));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
 function refreshDownloadState() {
   currentImageUrls = currentResults.flatMap((result) => result?.image_urls || []);
   currentDownloadFiles = currentResults.flatMap((result) =>
@@ -413,40 +472,59 @@ form.addEventListener("submit", async (event) => {
     };
     currentTaskPayloads = tasks;
 
-    const payload = {
-      prompts: tasks.map((task) => task.prompt),
-      model_name: lastSettings.modelName,
-      max_tokens: lastSettings.maxTokens,
-      image_size: lastSettings.imageSize,
-      aspect_ratio: lastSettings.aspectRatio,
-      api_key: localStorage.getItem(LOCAL_KEY_STORAGE)?.trim() || undefined,
-      concurrency: Number(document.querySelector("#concurrency").value),
-      reference_image_groups: tasks.map((task) => task.referenceImages),
-    };
+    const concurrency = Number(document.querySelector("#concurrency").value);
+    let mergedResults = [];
 
-    const response = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    if (isVercelMode) {
+      // Avoid FUNCTION_PAYLOAD_TOO_LARGE: send one task per request in Vercel mode.
+      const singleResults = await runTasksWithConcurrency(tasks, concurrency, async (task, index) => {
+        const result = await generateTask(task, lastSettings);
+        return { ...result, index };
+      });
+      mergedResults = tasks.map((task, index) => ({
+        ...singleResults[index],
+        index,
+        referenceLabel: task.referenceLabel,
+        taskPayload: task,
+      }));
+    } else {
+      const payload = {
+        prompts: tasks.map((task) => task.prompt),
+        model_name: lastSettings.modelName,
+        max_tokens: lastSettings.maxTokens,
+        image_size: lastSettings.imageSize,
+        aspect_ratio: lastSettings.aspectRatio,
+        api_key: localStorage.getItem(LOCAL_KEY_STORAGE)?.trim() || undefined,
+        concurrency,
+        reference_image_groups: tasks.map((task) => task.referenceImages),
+      };
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text);
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text);
+      }
+
+      const data = await response.json();
+      const resultByIndex = new Map(data.results.map((result) => [result.index, result]));
+      mergedResults = tasks.map((task, index) => ({
+        ...resultByIndex.get(index),
+        index,
+        referenceLabel: task.referenceLabel,
+        taskPayload: task,
+      }));
     }
 
-    const data = await response.json();
-    const resultByIndex = new Map(data.results.map((result) => [result.index, result]));
-    const mergedResults = tasks.map((task, index) => ({
-      ...resultByIndex.get(index),
-      index,
-      referenceLabel: task.referenceLabel,
-      taskPayload: task,
-    }));
     currentResults = mergedResults;
     refreshDownloadState();
     resultGrid.replaceChildren(...mergedResults.map(makeCard));
-    summary.textContent = `完成 ${data.success}/${data.total}，失败 ${data.failed}`;
+    const successCount = mergedResults.filter((item) => item?.status === "success").length;
+    summary.textContent = `完成 ${successCount}/${mergedResults.length}，失败 ${mergedResults.length - successCount}`;
   } catch (error) {
     summary.textContent = error.message;
   } finally {
