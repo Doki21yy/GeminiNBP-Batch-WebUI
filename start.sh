@@ -34,14 +34,29 @@ echo "[完成] 依赖安装成功"
 
 # 启动服务
 echo "[3/4] 启动服务..."
-osascript -e 'tell app "Terminal" to do script "cd '\''"'"$SCRIPT_DIR"'\'' && python3 -m uvicorn server:app --host 127.0.0.1 --port 8000"' > /dev/null 2>&1
+nohup python3 -m uvicorn server:app --host 127.0.0.1 --port 8000 > /dev/null 2>&1 &
+SERVER_PID=$!
 
-echo "[4/4] 打开浏览器..."
-sleep 2
-open http://127.0.0.1:8000
+# 等待服务就绪
+echo "[4/4] 等待服务启动..."
+ATTEMPTS=0
+while [ $ATTEMPTS -lt 30 ]; do
+    if curl -s http://127.0.0.1:8000/api/key > /dev/null 2>&1; then
+        echo "[完成] 服务已就绪，正在打开浏览器..."
+        open http://127.0.0.1:8000
+        echo ""
+        echo "============================================="
+        echo "  服务已启动，请勿关闭此窗口"
+        echo "  访问地址: http://127.0.0.1:8000"
+        echo "  按 Ctrl+C 停止服务"
+        echo "============================================="
+        wait $SERVER_PID
+        exit $?
+    fi
+    sleep 0.5
+    ATTEMPTS=$((ATTEMPTS + 1))
+done
 
-echo ""
-echo "============================================="
-echo "  服务已启动，请勿关闭 Terminal 窗口"
-echo "  访问地址: http://127.0.0.1:8000"
-echo "============================================="
+echo "[错误] 服务启动超时"
+kill $SERVER_PID 2>/dev/null
+exit 1

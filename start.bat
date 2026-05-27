@@ -41,11 +41,25 @@ echo [完成] 依赖安装成功
 
 REM 启动服务
 echo [3/4] 启动服务...
-start "Gemini NBP Server" python -m uvicorn server:app --host 127.0.0.1 --port 8000
+start "Gemini NBP Server" cmd /c "python -m uvicorn server:app --host 127.0.0.1 --port 8000"
 
-REM 等待服务启动
-echo [4/4] 打开浏览器...
-timeout /t 3 >nul
+REM 等待服务就绪
+echo [4/4] 等待服务启动...
+set /a attempts=0
+:wait_loop
+set /a attempts+=1
+curl -s http://127.0.0.1:8000/api/key >nul 2>&1
+if not errorlevel 1 goto service_ready
+if %attempts% gtr 30 (
+    echo [错误] 服务启动超时
+    pause
+    exit /b 1
+)
+timeout /t 1 >nul
+goto wait_loop
+
+:service_ready
+echo [完成] 服务已就绪，正在打开浏览器...
 start http://127.0.0.1:8000
 
 echo.
