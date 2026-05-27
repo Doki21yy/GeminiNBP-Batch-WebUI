@@ -320,12 +320,23 @@ async def _call_ark(
             },
         }
     except Exception as exc:
+        error_detail = {
+            "type": type(exc).__name__,
+            "msg": str(exc),
+        }
+        # Capture cause chain for connection errors
+        if exc.__cause__:
+            error_detail["cause"] = {
+                "type": type(exc.__cause__).__name__,
+                "msg": str(exc.__cause__),
+            }
         return {
             "id": task_id,
             "index": task_index,
             "status": "error",
             "prompt": prompt,
             "error": str(exc),
+            "error_detail": error_detail,
             "request_debug": {
                 "generation_config": body.get("generationConfig", {}),
                 "reference_images": len(normalized_reference_images),
